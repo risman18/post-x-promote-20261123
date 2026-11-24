@@ -1,42 +1,42 @@
-// Entry for make.fun's post-x-promote-make-your-own-bounty-01 (Node 22, stdlib only).
+// Hand the judges our X post pointer, untouched.
 //
-// The entry itself is a post on X: one post of our own that quotes make.fun's
-// make-your-own-bounty post (https://x.com/makefunai/status/2124915864336236646),
-// with a photo of its own attached and our play code in its text. This program
-// does the only job the repository has: it copies POST.json, which names that
-// post, from the repository root into the output directory, where the house
-// reads it and then reads the post's replies, reposts and quotes from X.
-// Nothing this program writes about the post is scored.
-//
-// POST.json still holds a placeholder address until the post is up on X;
-// replace it with the real post address before submitting.
-//
-// Local run, the way the grader runs it:
-//   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
+// The whole entry lives in POST.json next to this file: a tiny JSON
+// document whose "url" field names the post we published. The harness
+// expects that exact file to show up in the output directory, so this
+// program performs a faithful byte-for-byte copy and nothing more.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
-const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Where the bot's own files live. The runner points MAKEFUN_BOT_DIR at
+// the repository root; when run by hand we simply use the directory the
+// command was started from.
+const botDir = process.env.MAKEFUN_BOT_DIR ?? process.cwd();
 
-mkdirSync(OUTPUT_DIR, { recursive: true });
+// Where deliverables belong. MAKEFUN_OUTPUT_DIR is provided by the
+// runner; the conventional fallback is /output.
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-const source = join(BOT_DIR, 'POST.json');
-const target = join(OUTPUT_DIR, 'POST.json');
+const sourceFile = join(botDir, "POST.json");
+const targetFile = join(outputDir, "POST.json");
 
-let post;
-try {
-  post = readFileSync(source, 'utf8');
-  JSON.parse(post);
-} catch (err) {
-  console.error(`POST.json could not be read from ${source}: ${(err as Error).message}`);
-  process.exit(1);
+// Pre-flight sanity check: before handing the pointer over, confirm it
+// actually parses and that its "url" has the shape of an X status
+// address (https://x.com/<user>/status/<id>, or the twitter.com twin).
+// A malformed POST.json would score zero, so failing loudly here is
+// kinder than copying a broken file in silence.
+const pointer = JSON.parse(readFileSync(sourceFile, "utf8"));
+const statusShape = /^https:\/\/(x\.com|twitter\.com)\/[^/]+\/status\/\d+$/;
+if (typeof pointer.url !== "string" || !statusShape.test(pointer.url)) {
+  throw new Error(`POST.json does not name an X post: ${String(pointer.url)}`);
 }
 
-try {
-  writeFileSync(target, post);
-} catch (err) {
-  console.error(`POST.json could not be written to ${target}: ${(err as Error).message}`);
-  process.exit(1);
-}
+// The output directory is not guaranteed to exist yet, so create it
+// (and any parents) before copying into it.
+mkdirSync(outputDir, { recursive: true });
+
+// copyFileSync duplicates the file's bytes exactly, which is what we
+// want: no parsing, no re-serialising, no chance to mangle the JSON.
+copyFileSync(sourceFile, targetFile);
+
+console.log(`POST.json copied: ${sourceFile} -> ${targetFile}`);
